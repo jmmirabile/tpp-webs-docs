@@ -1,0 +1,586 @@
+openapi: 3.0.3
+info:
+  title: Venafi TPP WebSDK API (unofficial, hand-maintained)
+  version: "1.0.0"
+  description: >
+    Reverse-engineered from the pytpp client library (MIT-licensed), cross-referenced
+    against Venafi's public documentation. Maintained incrementally — only the Auth
+    and Certificates resource areas are covered so far. See the "API Reference"
+    section of this site for every other resource area as hand-written overview pages,
+    to be formalized into this spec over time.
+tags:
+  - name: Auth
+    description: Obtaining and verifying API session tokens (OAuth and legacy API key).
+  - name: Certificates
+    description: The core certificate lifecycle API — enroll, retrieve, renew, revoke, import, push.
+servers:
+  - url: "https://{host}"
+    variables:
+      host:
+        default: tpp.example.com
+        description: Hostname or IP of your on-prem TPP server.
+components:
+  securitySchemes:
+    oauthBearer:
+      type: http
+      scheme: bearer
+      description: >
+        OAuth access token obtained from /vedauth/Authorize/OAuth (or a related
+        OAuth flow). Sent as `Authorization: Bearer <access_token>`.
+    legacyApiKey:
+      type: apiKey
+      in: header
+      name: X-Venafi-API-Key
+      description: >
+        Deprecated since TPP 20.1. Obtained from POST /vedsdk/Authorize
+        (username/password). Prefer OAuth.
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        Error:
+          type: string
+          description: Human-readable error message. Present on most TPP error bodies.
+    LegacyAuthorizeRequest:
+      type: object
+      required: [Username, Password]
+      properties:
+        Username:
+          type: string
+        Password:
+          type: string
+          format: password
+    LegacyAuthorizeResponse:
+      type: object
+      properties:
+        APIKey:
+          type: string
+          description: Legacy session token. Send as X-Venafi-API-Key on subsequent calls.
+        ValidUntil:
+          type: string
+          format: date-time
+    OAuthPasswordGrantRequest:
+      type: object
+      required: [client_id, scope]
+      properties:
+        client_id:
+          type: string
+          description: Application ID of a pre-created API Application Integration (set up in Aperture).
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        scope:
+          type: string
+          description: >
+            Serialized scope string, e.g. "certificate:approve,delete;statistics".
+            Must be within the bounds granted to the Application Integration.
+        state:
+          type: string
+          nullable: true
+    OAuthCertificateRequest:
+      type: object
+      required: [client_id, scope]
+      properties:
+        client_id:
+          type: string
+        scope:
+          type: string
+          description: No username/password — the client TLS certificate is presented at the transport layer.
+    OAuthTokenRefreshRequest:
+      type: object
+      required: [client_id]
+      properties:
+        client_id:
+          type: string
+        refresh_token:
+          type: string
+        grant_type:
+          type: string
+          nullable: true
+        device_code:
+          type: string
+          nullable: true
+    OAuthTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires:
+          type: string
+        expires_in:
+          type: integer
+        identity:
+          type: string
+        scope:
+          type: string
+        token_type:
+          type: string
+    OAuthVerifyResponse:
+      type: object
+      properties:
+        identity:
+          type: string
+        scope:
+          type: string
+        valid_for:
+          type: integer
+        expires_unix_time:
+          type: integer
+    Certificate:
+      type: object
+      description: >
+        A config-object representation of a certificate. Field list is not
+        exhaustive — TPP returns many optional fields depending on OptionalFields
+        requested.
+      properties:
+        DN:
+          type: string
+          description: Distinguished Name, e.g. \VED\Policy\Certificates\example.com
+        Guid:
+          type: string
+        Name:
+          type: string
+        ParentDn:
+          type: string
+        SchemaClass:
+          type: string
+        CreatedOn:
+          type: string
+          format: date-time
+    CertificateFilter:
+      type: object
+      additionalProperties: true
+      description: Search filter query params, e.g. CN, Stage, ValidToGreater, etc.
+    CertificatesListResponse:
+      type: object
+      properties:
+        Certificates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Certificate"
+        TotalCount:
+          type: integer
+        DataRange:
+          type: string
+    CertificateRequestBody:
+      type: object
+      required: [PolicyDN, Subject]
+      description: >
+        Large parameter set covering subject, SANs, key algorithm/size, CA
+        template, custom fields, and workflow options. Only the most common
+        fields are modeled here; TPP accepts many more optional fields.
+      properties:
+        PolicyDN:
+          type: string
+        Subject:
+          type: string
+        SubjectAltNames:
+          type: array
+          items:
+            type: object
+            properties:
+              TypeName:
+                type: string
+                enum: [IPAddress, OtherName, Email, DNS, URI]
+              Name:
+                type: string
+        KeyAlgorithm:
+          type: string
+          example: RSA
+        KeyBitSize:
+          type: integer
+          example: 2048
+        CASpecificAttributes:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        CustomFields:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    CertificateRequestResponse:
+      type: object
+      properties:
+        CertificateDN:
+          type: string
+        Guid:
+          type: string
+    CertificateRenewRequest:
+      type: object
+      required: [CertificateDN]
+      properties:
+        CertificateDN:
+          type: string
+        PKCS10:
+          type: string
+          nullable: true
+          description: Optional CSR; if omitted, TPP generates the key/CSR itself.
+        ReenableRenewal:
+          type: boolean
+          nullable: true
+    CertificateRevokeRequest:
+      type: object
+      required: [CertificateDN]
+      properties:
+        CertificateDN:
+          type: string
+        Thumbprint:
+          type: string
+          nullable: true
+        Reason:
+          type: integer
+          nullable: true
+        Comments:
+          type: string
+          nullable: true
+        Disable:
+          type: boolean
+          nullable: true
+    CertificateAssociateRequest:
+      type: object
+      required: [CertificateDN, ApplicationDN]
+      properties:
+        CertificateDN:
+          type: string
+        ApplicationDN:
+          type: array
+          items:
+            type: string
+        PushToNew:
+          type: boolean
+          nullable: true
+    GenericResult:
+      type: object
+      properties:
+        Error:
+          type: string
+          nullable: true
+paths:
+  /vedsdk/Authorize:
+    post:
+      tags: [Auth]
+      summary: Legacy username/password login (deprecated since TPP 20.1)
+      description: >
+        Deprecated — prefer OAuth. Returns a legacy API key token to be sent
+        as `X-Venafi-API-Key` on subsequent requests.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LegacyAuthorizeRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegacyAuthorizeResponse"
+        "401":
+          description: Invalid credentials
+  /vedauth/Authorize/OAuth:
+    post:
+      tags: [Auth]
+      summary: OAuth token via username/password (password grant)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthPasswordGrantRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthTokenResponse"
+  /vedauth/Authorize/Certificate:
+    post:
+      tags: [Auth]
+      summary: OAuth token via client certificate (mutual TLS)
+      description: >
+        No username/password in the body — the client certificate is presented
+        at the TLS layer (configured on the HTTP client, not this request body).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthCertificateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthTokenResponse"
+  /vedauth/Authorize/Token:
+    post:
+      tags: [Auth]
+      summary: Refresh an OAuth token, or exchange a device code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthTokenRefreshRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthTokenResponse"
+  /vedauth/Authorize/Verify:
+    get:
+      tags: [Auth]
+      summary: Verify/introspect the current token
+      security:
+        - oauthBearer: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthVerifyResponse"
+  /vedauth/Revoke/Token:
+    get:
+      tags: [Auth]
+      summary: Revoke (log out) the current session token
+      security:
+        - oauthBearer: []
+      responses:
+        "200":
+          description: OK
+  /vedsdk/Certificates:
+    get:
+      tags: [Certificates]
+      summary: List/search certificates
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      parameters:
+        - name: Limit
+          in: query
+          schema:
+            type: integer
+        - name: Offset
+          in: query
+          schema:
+            type: integer
+        - name: OptionalFields
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertificatesListResponse"
+  /vedsdk/Certificates/Request:
+    post:
+      tags: [Certificates]
+      summary: Enroll/request a new certificate
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CertificateRequestResponse"
+  /vedsdk/Certificates/Renew:
+    post:
+      tags: [Certificates]
+      summary: Renew a certificate
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateRenewRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericResult"
+  /vedsdk/Certificates/Retrieve:
+    post:
+      tags: [Certificates]
+      summary: Download certificate data in a given format
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [CertificateDN, Format]
+              properties:
+                CertificateDN:
+                  type: string
+                Format:
+                  type: string
+                  enum: [Base64, "Base64 (PKCS #8)", DER, JKS, "PKCS #7", "PKCS #12"]
+                IncludePrivateKey:
+                  type: boolean
+                  nullable: true
+                Password:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: OK (certificate material, base64 or binary depending on Format)
+  /vedsdk/Certificates/Revoke:
+    post:
+      tags: [Certificates]
+      summary: Revoke a certificate
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateRevokeRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericResult"
+  /vedsdk/Certificates/Associate:
+    post:
+      tags: [Certificates]
+      summary: Associate a certificate with one or more Application objects
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateAssociateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericResult"
+  /vedsdk/Certificates/Import:
+    post:
+      tags: [Certificates]
+      summary: Import an externally-issued certificate (and optional private key)
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              required: [PolicyDN, CertificateData]
+              properties:
+                PolicyDN:
+                  type: string
+                CertificateData:
+                  type: string
+                  description: Base64-encoded certificate.
+                PrivateKeyData:
+                  type: string
+                  nullable: true
+                Password:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: OK
+  /vedsdk/Certificates/Validate:
+    post:
+      tags: [Certificates]
+      summary: Run file/SSL-TLS validation against a batch of certificates
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Certificates:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: OK
+  "/vedsdk/Certificates/{guid}":
+    get:
+      tags: [Certificates]
+      summary: Read a certificate object's attributes by GUID
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Certificate"
+    delete:
+      tags: [Certificates]
+      summary: Delete a certificate object by GUID
+      security:
+        - oauthBearer: []
+        - legacyApiKey: []
+      parameters:
+        - name: guid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK

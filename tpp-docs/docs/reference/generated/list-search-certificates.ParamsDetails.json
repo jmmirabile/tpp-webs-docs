@@ -1,0 +1,1 @@
+{"parameters":[{"name":"Limit","in":"query","schema":{"type":"integer"}},{"name":"Offset","in":"query","schema":{"type":"integer"}},{"name":"OptionalFields","in":"query","schema":{"type":"array","items":{"type":"string"}}}]}

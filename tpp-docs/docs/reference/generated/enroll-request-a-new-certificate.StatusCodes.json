@@ -1,0 +1,1 @@
+{"responses":{"200":{"description":"OK","content":{"application/json":{"schema":{"type":"object","properties":{"CertificateDN":{"type":"string"},"Guid":{"type":"string"}},"title":"CertificateRequestResponse"}}}}}}

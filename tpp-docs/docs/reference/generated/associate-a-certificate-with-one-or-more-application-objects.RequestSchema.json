@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","required":["CertificateDN","ApplicationDN"],"properties":{"CertificateDN":{"type":"string"},"ApplicationDN":{"type":"array","items":{"type":"string"}},"PushToNew":{"type":"boolean","nullable":true}},"title":"CertificateAssociateRequest"}}}}}

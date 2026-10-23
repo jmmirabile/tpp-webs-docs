@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","required":["client_id","scope"],"properties":{"client_id":{"type":"string"},"scope":{"type":"string","description":"No username/password — the client TLS certificate is presented at the transport layer."}},"title":"OAuthCertificateRequest"}}}}}

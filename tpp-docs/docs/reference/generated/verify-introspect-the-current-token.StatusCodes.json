@@ -1,0 +1,1 @@
+{"responses":{"200":{"description":"OK","content":{"application/json":{"schema":{"type":"object","properties":{"identity":{"type":"string"},"scope":{"type":"string"},"valid_for":{"type":"integer"},"expires_unix_time":{"type":"integer"}},"title":"OAuthVerifyResponse"}}}}}}
